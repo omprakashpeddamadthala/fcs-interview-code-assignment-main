@@ -10,6 +10,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.warehouse.api.WarehouseResource;
 import com.warehouse.api.beans.Warehouse;
 import com.fulfilment.application.monolith.warehouses.domain.exceptions.InvalidWarehouseStateException;
+import com.fulfilment.application.monolith.warehouses.domain.exceptions.LocationNotFoundException;
+import com.fulfilment.application.monolith.warehouses.domain.exceptions.BusinessRuleViolationException;
+import com.fulfilment.application.monolith.warehouses.domain.exceptions.WarehouseAlreadyExistsException;
+import com.fulfilment.application.monolith.warehouses.domain.exceptions.WarehouseNotFoundException;
+import com.fulfilment.application.monolith.warehouses.domain.exceptions.WarehouseAlreadyArchivedException;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -43,7 +48,6 @@ public class WarehouseResourceImpl implements WarehouseResource {
   }
 
   @Override
-  @Transactional
   public Warehouse createANewWarehouseUnit(@NotNull Warehouse data) {
     com.fulfilment.application.monolith.warehouses.domain.models.Warehouse domainWarehouse = toDomainWarehouse(data);
     createWarehouseOperation.create(domainWarehouse);
@@ -126,8 +130,24 @@ public class WarehouseResourceImpl implements WarehouseResource {
       LOGGER.error("Failed to handle request", exception);
 
       int code = 500;
+
+      // Handle JAX-RS WebApplicationException (e.g., NotFoundException)
       if (exception instanceof WebApplicationException) {
         code = ((WebApplicationException) exception).getResponse().getStatus();
+      }
+      // Handle domain-specific exceptions with appropriate HTTP status codes
+      else if (exception instanceof LocationNotFoundException) {
+        code = 400; // Bad Request - invalid location identifier
+      } else if (exception instanceof BusinessRuleViolationException) {
+        code = 400; // Bad Request - business rule violation
+      } else if (exception instanceof WarehouseAlreadyExistsException) {
+        code = 400; // Bad Request - duplicate business unit code
+      } else if (exception instanceof InvalidWarehouseStateException) {
+        code = 400; // Bad Request - invalid state or format
+      } else if (exception instanceof WarehouseNotFoundException) {
+        code = 404; // Not Found - warehouse doesn't exist
+      } else if (exception instanceof WarehouseAlreadyArchivedException) {
+        code = 409; // Conflict - warehouse already archived
       }
 
       ObjectNode exceptionJson = objectMapper.createObjectNode();
