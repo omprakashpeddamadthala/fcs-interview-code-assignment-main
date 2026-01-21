@@ -34,6 +34,8 @@ public class StoreResource {
 
   @Inject Event<StoreEvent> storeEvent;
 
+  @Inject Event<LegacySyncFailedEvent> legacySyncFailedEvent;
+
   private static final Logger LOGGER = Logger.getLogger(StoreResource.class.getName());
 
   @GET
@@ -135,16 +137,20 @@ public class StoreResource {
 
   void onStoreCommitted(@Observes(during = TransactionPhase.AFTER_SUCCESS) StoreEvent event) {
     LOGGER.info("Processing store event after transaction commit: " + event.getType());
-
-    switch (event.getType()) {
-      case CREATE:
-        legacyStoreManagerGateway.createStoreOnLegacySystem(event.getStore());
-        break;
-      case UPDATE:
-        legacyStoreManagerGateway.updateStoreOnLegacySystem(event.getStore());
-        break;
-      default:
-        LOGGER.warn("Unknown store event type: " + event.getType());
+    try {
+      switch (event.getType()) {
+        case CREATE:
+          legacyStoreManagerGateway.createStoreOnLegacySystem(event.getStore());
+          break;
+        case UPDATE:
+          legacyStoreManagerGateway.updateStoreOnLegacySystem(event.getStore());
+          break;
+        default:
+          LOGGER.warn("Unknown store event type: " + event.getType());
+      }
+    } catch (Exception e) {
+      LOGGER.error("Failed to process store event on legacy system: " + e.getMessage(), e);
+      legacySyncFailedEvent.fire(new LegacySyncFailedEvent(event.getStore(), e));
     }
   }
 
